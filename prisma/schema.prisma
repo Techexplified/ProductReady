@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              String?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Store {
+  id             String        @id @default(cuid())
+  name             String
+  shopName         String        @unique
+  organizationName String?
+  ownerEmail       String?
+  analysisPaused Boolean       @default(true)
+  connectedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  analyses       Analysis[]
+  analysisJobs   AnalysisJob[]
+  appSettings    AppSettings?
+}
+
+model AppSettings {
+  id                    String   @id @default(cuid())
+  storeId               String   @unique
+  storeName             String   @default("My Store")
+  timezone              String   @default("(GMT+5:30) Asia/Kolkata")
+  currency              String   @default("USD")
+  enableWidget          Boolean  @default(true)
+  showPoweredBy         Boolean  @default(true)
+  autoAnalyzeNew        Boolean  @default(false)
+  allowAiSuggestions    Boolean  @default(false)
+  minReviewsConfidence  Int      @default(50)
+  includeCustomerPhotos Boolean  @default(true)
+  analyzeProductImages  Boolean  @default(true)
+  detectCommonIssues    Boolean  @default(true)
+  // Widget Defaults
+  defaultLayout         String   @default("Vertical")
+  defaultPrimaryColor   String   @default("#4F46E5")
+  defaultBorderRadius   String   @default("8 px")
+  defaultDropShadow     Boolean  @default(true)
+  defaultMobileOptimized Boolean @default(true)
+  showRealityScore      Boolean  @default(true)
+  showAiSummary         Boolean  @default(true)
+  showProsCons          Boolean  @default(true)
+  showWorthBuying       Boolean  @default(true)
+  showConfidenceLevel   Boolean  @default(true)
+  showCommonIssues      Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  store                 Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
+
+enum AnalysisJobStatus {
+  NOT_ANALYZED
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model Analysis {
+  id                  String            @id @default(cuid())
+  storeId             String
+  productId           String            // Shopify Product GID (e.g. "gid://shopify/Product/123456789")
+  status              AnalysisJobStatus @default(NOT_ANALYZED)
+  score               Int               @default(0)
+  confidence          String            @default("—")
+  summary             String?
+  whatsMissingData    String?           // JSON string of whatsMissing array
+  recommendationsData String?           // JSON string of recommendations array
+  subScoresData       String?           // JSON string of subScores object
+  prosData            String?           // JSON string of pros array
+  consData            String?           // JSON string of cons array
+  views               Int               @default(0)
+  ctr                 String            @default("0.0%")
+  issuesCount         Int               @default(0)
+  lastAnalyzed        String            @default("—")
+  lastAnalyzedAt      DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  store          Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId])
+  @@index([storeId])
+  @@index([productId])
+}
+
+model AnalysisJob {
+  id            String            @id @default(cuid())
+  storeId       String
+  productId     String            // Shopify Product GID
+  status        AnalysisJobStatus @default(QUEUED)
+  progress      Int               @default(0)
+  currentStep   String
+  queuePosition Int?
+  failureReason String?
+  completedAt   DateTime?
+  startedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  store         Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+  @@index([storeId, queuePosition])
+  @@index([productId])
+}
