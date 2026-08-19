@@ -419,6 +419,7 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [analyzingIds, setAnalyzingIds] = useState<string[]>([]);
 
   // Add Product Form State
   const [newProdName, setNewProdName] = useState("");
@@ -536,30 +537,82 @@ export default function ProductsPage() {
     );
   };
 
-  // Trigger Single Product Analysis
-  const handleRunSingleAnalysis = (id: string, name: string) => {
+  // Trigger Single Product Analysis independently without disabling other rows
+  const handleRunSingleAnalysis = async (id: string, name: string) => {
     if (loaderData?.isDisconnected) {
       triggerToast("Store is currently disconnected. Reconnect store in Settings to run AI audits.");
       return;
     }
+
+    if (analyzingIds.includes(id)) {
+      return;
+    }
+
+    // Add this product ID to actively analyzing set
+    setAnalyzingIds((prev) => [...prev, id]);
 
     setProductsList((prev) =>
       prev.map((p) =>
         p.id === id
           ? {
               ...p,
-              status: "Queued",
+              status: "Running",
             }
           : p
       )
     );
 
-    const formData = new FormData();
-    formData.append("intent", "run-analysis");
-    formData.append("productId", id);
-    fetcher.submit(formData, { method: "post" });
+    triggerToast(`Running AI Analysis for "${name}"...`);
 
-    triggerToast(`AI Analysis queued for "${name}"...`);
+    try {
+      const formData = new FormData();
+      formData.append("intent", "run-analysis");
+      formData.append("productId", id);
+
+      const response = await fetch(window.location.pathname + window.location.search, {
+        method: "POST",
+        body: formData,
+      });
+
+      const actionData = await response.json();
+
+      if (actionData?.success && actionData?.aiData) {
+        setProductsList((prev) =>
+          prev.map((p) => {
+            const rawPId = p.id.includes("/") ? p.id.split("/").pop()! : p.id;
+            const targetRawId = id.includes("/") ? id.split("/").pop()! : id;
+            if (p.id === id || rawPId === targetRawId) {
+              return {
+                ...p,
+                score: actionData.aiData.realityScore ?? 85,
+                status: "Analyzed",
+                issuesCount: actionData.aiData.whatsMissing?.length || 0,
+                confidence: actionData.aiData.confidence || "High",
+                lastAnalyzed: "Just now",
+              };
+            }
+            return p;
+          })
+        );
+        triggerToast(`AI Analysis completed for "${name}" (Score: ${actionData.aiData.realityScore})`);
+      } else if (actionData?.products && Array.isArray(actionData.products)) {
+        setProductsList(actionData.products);
+        triggerToast(`AI Analysis completed for "${name}"!`);
+      } else {
+        setProductsList((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, status: p.score > 0 ? "Analyzed" : "Pending" } : p))
+        );
+        triggerToast(actionData?.message || actionData?.error || `Analysis failed for "${name}".`);
+      }
+    } catch (err) {
+      console.error("Error analyzing product:", err);
+      setProductsList((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, status: p.score > 0 ? "Analyzed" : "Pending" } : p))
+      );
+      triggerToast(`Analysis failed for "${name}". Please try again.`);
+    } finally {
+      setAnalyzingIds((prev) => prev.filter((item) => item !== id));
+    }
   };
 
   // Add Product directly in Shopify via GraphQL
@@ -981,9 +1034,10 @@ export default function ProductsPage() {
               ) : (
                 displayedProducts.map((item) => {
                   const isSelected = selectedIds.includes(item.id);
+                  const isItemAnalyzing = analyzingIds.includes(item.id);
                   const isAnalyzed = item.status === "Analyzed" && item.score > 0 && item.lastAnalyzed !== "—";
                   const isQueued = item.status === "Queued";
-                  const isRunning = item.status === "Running";
+                  const isRunning = item.status === "Running" || isItemAnalyzing;
 
                   return (
                     <tr
@@ -1144,16 +1198,35 @@ export default function ProductsPage() {
                             <span>Details</span>
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleRunSingleAnalysis(item.id, item.name)}
-                            disabled={loaderData?.isDisconnected || isQueued || isRunning || fetcher.state === "submitting"}
-                            className={`px-3 py-1 text-xs font-semibold rounded-lg shadow-2xs transition-colors whitespace-nowrap ${
+                            disabled={loaderData?.isDisconnected || isItemAnalyzing}
+                            className={`px-3 py-1 text-xs font-semibold rounded-lg shadow-2xs transition-all whitespace-nowrap ${
                               loaderData?.isDisconnected
                                 ? "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed shadow-none opacity-50 pointer-events-none"
-                                : "bg-[#4F46E5] hover:bg-[#4338CA] text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                : isItemAnalyzing
+                                ? "bg-[#4F46E5]/80 text-white cursor-not-allowed opacity-90 shadow-none"
+                                : "bg-[#4F46E5] hover:bg-[#4338CA] text-white cursor-pointer active:scale-95 shadow-xs"
                             }`}
                             title={loaderData?.isDisconnected ? "Store is currently disconnected. Reconnect in Settings to run AI audits." : undefined}
                           >
-                            {isAnalyzed ? "Re-analyze" : isQueued ? "Queued" : isRunning ? "Analyzing..." : "Analyze"}
+                            {isItemAnalyzing ? (
+                              <span className="flex items-center gap-1.5">
+                                <RefreshCw className="w-3 h-3 animate-spin text-white" />
+                                <span>Analyzing...</span>
+                              </span>
+                            ) : isAnalyzed ? (
+                              "Re-analyze"
+                            ) : isQueued ? (
+                              "Queued"
+                            ) : isRunning ? (
+                              <span className="flex items-center gap-1.5">
+                                <RefreshCw className="w-3 h-3 animate-spin text-white" />
+                                <span>Analyzing...</span>
+                              </span>
+                            ) : (
+                              "Analyze"
+                            )}
                           </button>
                         </div>
                       </td>
