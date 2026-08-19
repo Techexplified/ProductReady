@@ -204,7 +204,7 @@ export default function SettingsPage() {
   }, [fetcher.data]);
 
   const handleCopyEmail = () => {
-    navigator.clipboard.writeText("support@explified.com");
+    navigator.clipboard.writeText("hello@explified.com");
     setCopiedEmail(true);
     setTimeout(() => setCopiedEmail(false), 2000);
   };
@@ -549,12 +549,12 @@ export default function SettingsPage() {
 
               <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-gray-200/80 gap-2">
                 <a
-                  href="https://mail.google.com/mail/?view=cm&fs=1&to=support@explified.com"
+                  href="https://mail.google.com/mail/?view=cm&fs=1&to=hello@explified.com"
                   target="_blank"
                   rel="noreferrer"
                   className="text-xs font-bold text-gray-900 hover:text-[#4F46E5] transition-colors truncate"
                 >
-                  support@explified.com
+                  hello@explified.com
                 </a>
 
                 <button
@@ -569,7 +569,7 @@ export default function SettingsPage() {
 
               <div className="flex items-center justify-between text-[11px] text-gray-500 pt-0.5">
                 <a
-                  href="mailto:support@explified.com"
+                  href="mailto:hello@explified.com"
                   className="font-semibold text-[#4F46E5] hover:underline flex items-center gap-1"
                 >
                   Send Direct Email <ExternalLink className="w-3 h-3" />

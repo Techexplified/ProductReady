@@ -50,7 +50,7 @@ export function ConnectStoreView({
   const shopifyAdminUrl = `https://${myshopifyDomain}/admin`;
 
   const handleCopyEmail = () => {
-    navigator.clipboard.writeText("support@explified.com");
+    navigator.clipboard.writeText("hello@explified.com");
     setCopiedEmail(true);
     setTimeout(() => setCopiedEmail(false), 2000);
   };
@@ -381,7 +381,7 @@ export function ConnectStoreView({
                   Official Support Email:
                 </div>
                 <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-purple-100 text-xs">
-                  <span className="font-semibold text-gray-800">support@explified.com</span>
+                  <span className="font-semibold text-gray-800">hello@explified.com</span>
                   <button
                     type="button"
                     onClick={handleCopyEmail}
