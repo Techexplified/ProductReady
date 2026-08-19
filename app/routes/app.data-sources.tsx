@@ -47,7 +47,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeName = data?.shop?.name || storeName;
     myshopifyDomain = data?.shop?.myshopifyDomain || myshopifyDomain;
     policiesFound = data?.shop?.shopPolicies?.length || 0;
-  } catch (e) {}
+  } catch (e) { }
 
   const analysisCount = dbStore
     ? await prisma.analysis.count({ where: { storeId: dbStore.id } })

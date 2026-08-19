@@ -321,8 +321,8 @@ export async function applyDefaultsToAllWidgets(shopName: string, defaults: Part
     let themeConfig: any = {};
     let contentConfig: any = {};
 
-    try { themeConfig = JSON.parse(w.theme || "{}"); } catch (e) {}
-    try { contentConfig = JSON.parse(w.contentConfig || "{}"); } catch (e) {}
+    try { themeConfig = JSON.parse(w.theme || "{}"); } catch (e) { }
+    try { contentConfig = JSON.parse(w.contentConfig || "{}"); } catch (e) { }
 
     themeConfig.layout = defaults.defaultLayout || "Vertical";
     themeConfig.primaryColor = defaults.defaultPrimaryColor || "#4F46E5";
@@ -405,7 +405,7 @@ export async function getStoreConnectionStatus(shopName: string): Promise<{ isNe
           `UPDATE "Store" SET "connectedAt" = NOW() WHERE "id" = $1`,
           row.id
         );
-      } catch (e) {}
+      } catch (e) { }
       return { isNewUserOrDeleted: false, isDisconnected: false };
     }
 
@@ -439,7 +439,7 @@ export async function reconnectStoreData(shopName: string, storeName?: string) {
       `UPDATE "Store" SET "connectedAt" = NOW() WHERE "id" = $1 AND "connectedAt" IS NULL`,
       store.id
     );
-  } catch (e) {}
+  } catch (e) { }
 
   return { success: true, message: "Store reconnected successfully!", lastSyncAt: formatStoreDate(updatedStore.updatedAt) };
 }
@@ -459,19 +459,19 @@ export async function deleteStoreAccount(shopName: string) {
       await prisma.appSettings.deleteMany({ where: { storeId: store.id } });
 
       if ((prisma as any).product?.deleteMany) {
-        try { await (prisma as any).product.deleteMany({ where: { storeId: store.id } }); } catch (e) {}
+        try { await (prisma as any).product.deleteMany({ where: { storeId: store.id } }); } catch (e) { }
       }
       if ((prisma as any).widget?.deleteMany) {
-        try { await (prisma as any).widget.deleteMany({ where: { storeId: store.id } }); } catch (e) {}
+        try { await (prisma as any).widget.deleteMany({ where: { storeId: store.id } }); } catch (e) { }
       }
       if ((prisma as any).widgetAnalytics?.deleteMany) {
-        try { await (prisma as any).widgetAnalytics.deleteMany({ where: { storeId: store.id } }); } catch (e) {}
+        try { await (prisma as any).widgetAnalytics.deleteMany({ where: { storeId: store.id } }); } catch (e) { }
       }
       if ((prisma as any).dataSource?.deleteMany) {
-        try { await (prisma as any).dataSource.deleteMany({ where: { storeId: store.id } }); } catch (e) {}
+        try { await (prisma as any).dataSource.deleteMany({ where: { storeId: store.id } }); } catch (e) { }
       }
       if ((prisma as any).billingInvoice?.deleteMany) {
-        try { await (prisma as any).billingInvoice.deleteMany({ where: { storeId: store.id } }); } catch (e) {}
+        try { await (prisma as any).billingInvoice.deleteMany({ where: { storeId: store.id } }); } catch (e) { }
       }
 
       await prisma.store.delete({
