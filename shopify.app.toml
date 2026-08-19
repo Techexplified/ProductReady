@@ -52,6 +52,10 @@ api_version = "2026-10"
   uri = "/webhooks/products/update"
   topics = [ "products/update" ]
 
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
+
 [auth]
 redirect_urls = [ "https://product-ready.vercel.app/api/auth" ]
 
