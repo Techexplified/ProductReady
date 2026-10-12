@@ -29,6 +29,7 @@ import { ProductDetailsDrawer } from "../components/products/ProductDetailsDrawe
 import { OnboardingView } from "../components/onboarding/OnboardingView";
 import { ConnectStoreView } from "../components/onboarding/ConnectStoreView";
 import type { CompleteProductDetails } from "../services/product-details.service";
+import { safeApiFetch } from "../utils/safeApiFetch";
 import {
   Search,
   Sparkles,
@@ -211,7 +212,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  let session, admin;
+  try {
+    const authResult = await authenticate.admin(request);
+    session = authResult.session;
+    admin = authResult.admin;
+  } catch (authError: any) {
+    console.error("Authentication failed in app.products._index action:", authError);
+    return { success: false, error: "Session expired or authentication failed. Please reload.", isAuthError: true };
+  }
+
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
   const shopName = session.shop;
@@ -521,22 +531,20 @@ export default function ProductsPage() {
       formData.append("intent", "run-analysis");
       formData.append("productId", id);
 
-      const response = await fetch("/api/analyze-product", {
+      const res = await safeApiFetch<{
+        success: boolean;
+        aiData?: any;
+        products?: any[];
+        message?: string;
+        error?: string;
+      }>("/api/analyze-product", {
         method: "POST",
         body: formData,
       });
 
-      let actionData: any = null;
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        actionData = await response.json();
-      } else {
-        const text = await response.text();
-        console.error("Non-JSON response from /api/analyze-product:", response.status, text.slice(0, 300));
-        throw new Error(`Server returned status ${response.status} instead of JSON.`);
-      }
+      const actionData = res.data;
 
-      if (actionData?.success && actionData?.aiData) {
+      if (res.ok && actionData?.success && actionData?.aiData) {
         setProductsList((prev) =>
           prev.map((p) => {
             const rawPId = p.id.includes("/") ? p.id.split("/").pop()! : p.id;
@@ -562,7 +570,7 @@ export default function ProductsPage() {
         setProductsList((prev) =>
           prev.map((p) => (p.id === id ? { ...p, status: p.score > 0 ? "Analyzed" : "Pending" } : p))
         );
-        triggerToast(actionData?.message || actionData?.error || `Analysis failed for "${name}".`);
+        triggerToast(res.error || actionData?.message || actionData?.error || `Analysis failed for "${name}".`);
       }
     } catch (err: any) {
       console.error("Error analyzing product:", err);
@@ -613,12 +621,11 @@ export default function ProductsPage() {
     setIsDrawerLoading(true);
     try {
       const rawId = item.id.includes("/") ? item.id.split("/").pop()! : item.id;
-      const res = await fetch(`/api/product-details/${rawId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.productDetails) {
-          setDrawerProduct(data.productDetails);
-        }
+      const res = await safeApiFetch<{ productDetails: any }>(`/api/product-details/${rawId}`);
+      if (res.ok && res.data?.productDetails) {
+        setDrawerProduct(res.data.productDetails);
+      } else if (res.error) {
+        triggerToast(res.error);
       }
     } catch (err) {
       console.error("Failed to fetch product details for drawer:", err);

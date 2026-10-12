@@ -336,7 +336,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
 // EXPLICIT RE-ANALYSIS ACTION TRIGGERED ONLY WHEN CLICKING "RE-ANALYZE NOW" / "ANALYZE" BUTTON
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  let session, admin;
+  try {
+    const authResult = await authenticate.admin(request);
+    session = authResult.session;
+    admin = authResult.admin;
+  } catch (authError: any) {
+    console.error("Authentication failed in app.products.$productId action:", authError);
+    return { success: false, error: "Session expired or authentication failed. Please reload the app.", isAuthError: true };
+  }
+
   const rawParamId = params.productId || "";
   const decodedId = decodeURIComponent(rawParamId);
   const numericId = decodedId.includes("/") ? decodedId.split("/").pop()! : decodedId;

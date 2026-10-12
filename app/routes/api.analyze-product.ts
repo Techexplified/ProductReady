@@ -7,12 +7,28 @@ import {
 import { getStoreConnectionStatus } from "../services/settings.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
-  const shopName = session.shop;
-
   if (request.method !== "POST") {
     return Response.json({ success: false, error: "Method not allowed" }, { status: 405 });
   }
+
+  let session, admin;
+  try {
+    const authResult = await authenticate.admin(request);
+    session = authResult.session;
+    admin = authResult.admin;
+  } catch (authError: any) {
+    console.error("Authentication failed in /api/analyze-product:", authError);
+    return Response.json(
+      {
+        success: false,
+        error: "Session expired or authentication failed. Please reload the app.",
+        isAuthError: true,
+      },
+      { status: 401 }
+    );
+  }
+
+  const shopName = session.shop;
 
   const { isDisconnected } = await getStoreConnectionStatus(shopName);
   if (isDisconnected) {

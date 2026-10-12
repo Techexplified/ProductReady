@@ -3,10 +3,21 @@ import { authenticate } from "../shopify.server";
 import { syncProductsFromShopify } from "../services/shopifyProduct.service";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
-
   if (request.method !== "POST") {
-    return { success: false, message: "Method not allowed" };
+    return Response.json({ success: false, message: "Method not allowed" }, { status: 405 });
+  }
+
+  let session, admin;
+  try {
+    const authResult = await authenticate.admin(request);
+    session = authResult.session;
+    admin = authResult.admin;
+  } catch (authError: any) {
+    console.error("Authentication failed in app.products.sync:", authError);
+    return Response.json(
+      { success: false, message: "Session expired or authentication failed. Please reload the app.", isAuthError: true },
+      { status: 401 }
+    );
   }
 
   let storeName = session.shop.split(".")[0];
