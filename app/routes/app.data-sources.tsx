@@ -49,6 +49,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     policiesFound = data?.shop?.shopPolicies?.length || 0;
   } catch (e) { }
 
+  const dbStore = await prisma.store.findUnique({ where: { shopName } });
+
   const analysisCount = dbStore
     ? await prisma.analysis.count({ where: { storeId: dbStore.id } })
     : 0;

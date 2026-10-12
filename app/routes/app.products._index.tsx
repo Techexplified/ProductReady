@@ -15,6 +15,7 @@ import {
   createBulkAnalysisJobs,
   formatLastAnalyzed,
   runAutoAnalysisForProduct,
+  fetchFreshMergedProducts,
   AnalysisRecordDTO,
 } from "../services/analysis.service.server";
 import {
@@ -225,55 +226,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { success: false, message: "Store is currently disconnected. Reconnect store in Settings to run AI audits." };
   }
 
-  const fetchFreshMergedProducts = async (): Promise<MergedProductItem[]> => {
-    const { products: shopifyProducts } = await getShopifyProducts(admin, 100);
-    const analysisRecords = await getAnalysisRecordsForShop(shopName);
-
-    return shopifyProducts.map((sp) => {
-      const rawNumeric = sp.id.includes("/") ? sp.id.split("/").pop()! : sp.id;
-      const gidPId = `gid://shopify/Product/${rawNumeric}`;
-      const analysis: AnalysisRecordDTO | undefined =
-        analysisRecords[sp.id] || analysisRecords[gidPId] || analysisRecords[rawNumeric];
-
-      const isCompleted = Boolean(
-        analysis &&
-        analysis.status === "COMPLETED" &&
-        analysis.score && analysis.score > 0 &&
-        analysis.lastAnalyzed && analysis.lastAnalyzed !== "—"
-      );
-
-      let computedStatus: MergedProductItem["status"] = "Pending";
-      if (isCompleted) {
-        computedStatus = "Analyzed";
-      } else if (analysis?.status === "QUEUED") {
-        computedStatus = "Queued";
-      } else if (analysis?.status === "RUNNING") {
-        computedStatus = "Running";
-      } else {
-        computedStatus = "Pending";
-      }
-
-      return {
-        id: sp.id,
-        name: sp.title,
-        category: sp.productType || "General",
-        price: sp.price || "$0.00",
-        sku: sp.sku || `SKU-${rawNumeric}`,
-        score: isCompleted ? (analysis?.score ?? 0) : 0,
-        status: computedStatus,
-        confidence: isCompleted ? (analysis?.confidence ?? "—") : "—",
-        iconType: "default",
-        views: isCompleted ? (analysis?.views ?? 140) : 0,
-        ctr: isCompleted ? (analysis?.ctr ?? "3.2%") : "—",
-        issuesCount: isCompleted ? (analysis?.issuesCount ?? 0) : 0,
-        lastAnalyzed: isCompleted ? (analysis?.lastAnalyzed ?? "—") : "—",
-        imageUrl: sp.featuredImage?.url || null,
-        vendor: sp.vendor || "Default Store",
-        shopifyStatus: sp.status,
-      };
-    });
-  };
-
   // Sync Products from Shopify Admin API into PostgreSQL
   if (intent === "sync-products" || intent === "sync") {
     let storeName = session.shop.split(".")[0];
@@ -291,7 +243,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await prisma.analysisJob.deleteMany({ where: { storeId: store.id } });
     }
 
-    const freshProducts = await fetchFreshMergedProducts();
+    const freshProducts = await fetchFreshMergedProducts(admin, shopName);
     return { success: result.success, totalSynced: result.totalSynced, products: freshProducts, message: result.message };
   }
 
@@ -319,7 +271,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         await runAutoAnalysisForProduct(admin, shopName, createdRes.product.id);
       }
 
-      const freshProducts = await fetchFreshMergedProducts();
+      const freshProducts = await fetchFreshMergedProducts(admin, shopName);
       return { success: true, products: freshProducts, message: `Product "${name}" created and auto-analyzed successfully!` };
     }
   }
@@ -329,7 +281,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const rawProductId = String(formData.get("productId") ?? "");
     if (rawProductId) {
       const aiData = await runAutoAnalysisForProduct(admin, shopName, rawProductId);
-      const freshProducts = await fetchFreshMergedProducts();
+      const freshProducts = await fetchFreshMergedProducts(admin, shopName);
       if (aiData) {
         return { success: true, aiData, productId: rawProductId, products: freshProducts };
       }
@@ -345,7 +297,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       for (const pId of productIds) {
         await runAutoAnalysisForProduct(admin, shopName, pId);
       }
-      const freshProducts = await fetchFreshMergedProducts();
+      const freshProducts = await fetchFreshMergedProducts(admin, shopName);
       return { success: true, count: productIds.length, products: freshProducts, message: `Bulk AI Analysis completed for ${productIds.length} products!` };
     }
   }
@@ -569,12 +521,20 @@ export default function ProductsPage() {
       formData.append("intent", "run-analysis");
       formData.append("productId", id);
 
-      const response = await fetch(window.location.pathname + window.location.search, {
+      const response = await fetch("/api/analyze-product", {
         method: "POST",
         body: formData,
       });
 
-      const actionData = await response.json();
+      let actionData: any = null;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        actionData = await response.json();
+      } else {
+        const text = await response.text();
+        console.error("Non-JSON response from /api/analyze-product:", response.status, text.slice(0, 300));
+        throw new Error(`Server returned status ${response.status} instead of JSON.`);
+      }
 
       if (actionData?.success && actionData?.aiData) {
         setProductsList((prev) =>
@@ -604,7 +564,7 @@ export default function ProductsPage() {
         );
         triggerToast(actionData?.message || actionData?.error || `Analysis failed for "${name}".`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error analyzing product:", err);
       setProductsList((prev) =>
         prev.map((p) => (p.id === id ? { ...p, status: p.score > 0 ? "Analyzed" : "Pending" } : p))
@@ -630,7 +590,7 @@ export default function ProductsPage() {
     formData.append("price", formattedPrice);
     formData.append("sku", formattedSku);
 
-    fetcher.submit(formData, { method: "post" });
+    fetcher.submit(formData, { method: "post", action: "?index" });
 
     setIsAddModalOpen(false);
     setNewProdName("");
@@ -670,7 +630,7 @@ export default function ProductsPage() {
   const handleSyncProducts = () => {
     const formData = new FormData();
     formData.append("intent", "sync-products");
-    fetcher.submit(formData, { method: "post" });
+    fetcher.submit(formData, { method: "post", action: "?index" });
     triggerToast("Synchronizing products from Shopify Admin GraphQL API...");
   };
 
@@ -692,7 +652,7 @@ export default function ProductsPage() {
     const formData = new FormData();
     formData.append("intent", "run-bulk-analysis");
     formData.append("productIds", JSON.stringify(allIds));
-    fetcher.submit(formData, { method: "post" });
+    fetcher.submit(formData, { method: "post", action: "?index" });
 
     triggerToast(`Bulk AI Analysis initiated for all ${allIds.length} products!`);
   };
@@ -718,7 +678,7 @@ export default function ProductsPage() {
     const formData = new FormData();
     formData.append("intent", "run-bulk-analysis");
     formData.append("productIds", JSON.stringify(selectedIds));
-    fetcher.submit(formData, { method: "post" });
+    fetcher.submit(formData, { method: "post", action: "?index" });
 
     triggerToast(`AI Analysis initiated for ${selectedIds.length} selected products!`);
     setSelectedIds([]);
@@ -750,7 +710,7 @@ export default function ProductsPage() {
   const handleConnectStore = () => {
     const formData = new FormData();
     formData.append("intent", "connect-store");
-    fetcher.submit(formData, { method: "post" });
+    fetcher.submit(formData, { method: "post", action: "?index" });
     setToastMessage("Shopify store connected!");
     setTimeout(() => setToastMessage(null), 3000);
   };

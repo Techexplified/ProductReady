@@ -346,3 +346,62 @@ export async function runAutoAnalysisForProduct(
   }
   return null;
 }
+
+export async function fetchFreshMergedProducts(
+  admin: any,
+  shopName: string
+): Promise<any[]> {
+  try {
+    const { getShopifyProducts } = await import("./shopify.service.server");
+    const { products: shopifyProducts } = await getShopifyProducts(admin, 100);
+    const analysisRecords = await getAnalysisRecordsForShop(shopName);
+
+    return shopifyProducts.map((sp) => {
+      const rawNumeric = sp.id.includes("/") ? sp.id.split("/").pop()! : sp.id;
+      const gidPId = `gid://shopify/Product/${rawNumeric}`;
+      const analysis: AnalysisRecordDTO | undefined =
+        analysisRecords[sp.id] || analysisRecords[gidPId] || analysisRecords[rawNumeric];
+
+      const isCompleted = Boolean(
+        analysis &&
+        analysis.status === "COMPLETED" &&
+        analysis.score && analysis.score > 0 &&
+        analysis.lastAnalyzed && analysis.lastAnalyzed !== "—"
+      );
+
+      let computedStatus = "Pending";
+      if (isCompleted) {
+        computedStatus = "Analyzed";
+      } else if (analysis?.status === "QUEUED") {
+        computedStatus = "Queued";
+      } else if (analysis?.status === "RUNNING") {
+        computedStatus = "Running";
+      } else {
+        computedStatus = "Pending";
+      }
+
+      return {
+        id: sp.id,
+        name: sp.title,
+        category: sp.productType || "General",
+        price: sp.price || "$0.00",
+        sku: sp.sku || `SKU-${rawNumeric}`,
+        score: isCompleted ? (analysis?.score ?? 0) : 0,
+        status: computedStatus,
+        confidence: isCompleted ? (analysis?.confidence ?? "—") : "—",
+        iconType: "default",
+        views: isCompleted ? (analysis?.views ?? 140) : 0,
+        ctr: isCompleted ? (analysis?.ctr ?? "3.2%") : "—",
+        issuesCount: isCompleted ? (analysis?.issuesCount ?? 0) : 0,
+        lastAnalyzed: isCompleted ? (analysis?.lastAnalyzed ?? "—") : "—",
+        imageUrl: sp.featuredImage?.url || null,
+        vendor: sp.vendor || "Default Store",
+        shopifyStatus: sp.status,
+      };
+    });
+  } catch (err) {
+    console.error("fetchFreshMergedProducts error:", err);
+    return [];
+  }
+}
+

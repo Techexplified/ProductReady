@@ -1,4 +1,4 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
@@ -33,6 +33,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeDomain: data?.shop?.myshopifyDomain ?? "",
     products,
   };
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  await authenticate.admin(request);
+  return Response.json({ success: true });
 };
 
 export default function App() {

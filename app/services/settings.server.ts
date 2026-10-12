@@ -422,7 +422,7 @@ export async function getStoreConnectionStatus(shopName: string): Promise<{ isNe
 /**
  * Reconnect Store: Unpauses store analysis in PostgreSQL DB
  */
-export async function reconnectStoreData(shopName: string, storeName?: string) {
+export async function reconnectStoreData(shopName: string, storeName?: string, ownerEmail?: string) {
   const store = await ensureStore(shopName, storeName);
 
   const updatedStore = await prisma.store.update({
