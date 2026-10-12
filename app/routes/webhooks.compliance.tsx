@@ -3,8 +3,18 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { topic, shop, payload } = await authenticate.webhook(request);
+  let webhookContext;
+  try {
+    webhookContext = await authenticate.webhook(request);
+  } catch (error) {
+    console.error("Webhook authentication failed for compliance:", error);
+    return new Response(JSON.stringify({ message: "Invalid webhook request" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
+  const { topic, shop, payload } = webhookContext;
   console.log(`Received compliance webhook: ${topic} for shop: ${shop}`);
 
   switch (topic) {
@@ -50,4 +60,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         headers: { "Content-Type": "application/json" },
       });
   }
+};
+
+export const loader = async () => {
+  return new Response("OK", { status: 200 });
 };

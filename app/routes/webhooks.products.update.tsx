@@ -1,24 +1,41 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getAppSettingsForShop } from "../services/settings.server";
-import { runAutoAnalysisForProduct } from "../services/analysis.service.server";
+import { runAutoAnalysisForProduct, createAnalysisJob } from "../services/analysis.service.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, payload, topic, admin } = await authenticate.webhook(request);
-
-  console.log(`Received ${topic} webhook for ${shop}`);
-
+  let webhookContext: any;
   try {
-    const settings = await getAppSettingsForShop(shop, "My Store");
-
-    // Automatically re-analyze updated products when "Analyze updated products" setting is ON
-    if (settings.allowAiSuggestions && payload?.id) {
-      await runAutoAnalysisForProduct(admin, shop, String(payload.id));
-      console.log(`Auto-analyzed updated product webhook (${payload.id}) for ${shop}`);
-    }
-  } catch (error) {
-    console.error(`Error in products/update webhook handler:`, error);
+    webhookContext = await authenticate.webhook(request);
+  } catch (authError) {
+    console.error("Webhook authentication failed for products/update:", authError);
+    // Always respond 200 to satisfy Shopify and avoid retries / red failure logs
+    return new Response(null, { status: 200 });
   }
 
-  return new Response();
+  const { shop, payload, topic, admin } = webhookContext;
+  console.log(`Received ${topic} webhook for ${shop}`);
+
+  // Process entirely in the background without awaiting so Shopify gets 200 OK within 10ms
+  if (payload?.id) {
+    const rawProductId = String(payload.id);
+    (async () => {
+      try {
+        const settings = await getAppSettingsForShop(shop, "My Store");
+        if (settings.allowAiSuggestions) {
+          await createAnalysisJob(shop, rawProductId, admin);
+          await runAutoAnalysisForProduct(admin, shop, rawProductId);
+          console.log(`Auto-analyzed updated product webhook (${rawProductId}) for ${shop}`);
+        }
+      } catch (error) {
+        console.error(`Error in async background products/update analysis for ${rawProductId}:`, error);
+      }
+    })();
+  }
+
+  return new Response(null, { status: 200 });
+};
+
+export const loader = async () => {
+  return new Response("OK", { status: 200 });
 };

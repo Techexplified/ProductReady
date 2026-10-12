@@ -244,42 +244,53 @@ export interface ShopifyProductWithPolicies extends ShopifyProductDetail {
 export function resolveMetafieldDisplayValue(mf: any): string {
   if (!mf) return "";
 
-  if (mf.references?.nodes && mf.references.nodes.length > 0) {
-    const labels = mf.references.nodes.map((node: any) => {
-      const labelField = node.fields?.find((f: any) => f.key === "label" || f.key === "name" || f.key === "title");
+  try {
+    if (mf.references?.nodes && Array.isArray(mf.references.nodes) && mf.references.nodes.length > 0) {
+      const labels = mf.references.nodes
+        .filter((node: any) => node != null)
+        .map((node: any) => {
+          const labelField = Array.isArray(node.fields)
+            ? node.fields.find((f: any) => f && (f.key === "label" || f.key === "name" || f.key === "title"))
+            : undefined;
+          if (labelField?.value) return labelField.value;
+          if (node.handle) {
+            return String(node.handle)
+              .split("-")
+              .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(" ");
+          }
+          return node.id ? String(node.id).split("/").pop() : "";
+        })
+        .filter(Boolean);
+      if (labels.length > 0) return labels.join(", ");
+    }
+
+    if (mf.reference) {
+      const labelField = Array.isArray(mf.reference.fields)
+        ? mf.reference.fields.find((f: any) => f && (f.key === "label" || f.key === "name" || f.key === "title"))
+        : undefined;
       if (labelField?.value) return labelField.value;
-      if (node.handle) {
-        return node.handle
+      if (mf.reference.handle) {
+        return String(mf.reference.handle)
           .split("-")
           .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(" ");
       }
-      return node.id;
-    });
-    return labels.join(", ");
-  }
-
-  if (mf.reference) {
-    const labelField = mf.reference.fields?.find((f: any) => f.key === "label" || f.key === "name" || f.key === "title");
-    if (labelField?.value) return labelField.value;
-    if (mf.reference.handle) {
-      return mf.reference.handle
-        .split("-")
-        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
     }
-  }
 
-  const rawValue = mf.value != null ? String(mf.value) : "";
-  if (rawValue.startsWith("[\"gid://") || rawValue.startsWith("gid://")) {
-    try {
-      const parsed = JSON.parse(rawValue);
-      if (Array.isArray(parsed)) {
-        return parsed.map((gid: string) => gid.split("/").pop()).join(", ");
-      }
-    } catch (e) {}
+    const rawValue = mf.value != null ? String(mf.value) : "";
+    if (rawValue.startsWith("[\"gid://") || rawValue.startsWith("gid://")) {
+      try {
+        const parsed = JSON.parse(rawValue);
+        if (Array.isArray(parsed)) {
+          return parsed.map((gid: string) => String(gid).split("/").pop()).join(", ");
+        }
+      } catch (e) {}
+    }
+    return rawValue;
+  } catch (err) {
+    return mf.value != null ? String(mf.value) : "";
   }
-  return rawValue;
 }
 
 /**
