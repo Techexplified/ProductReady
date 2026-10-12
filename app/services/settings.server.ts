@@ -51,11 +51,13 @@ async function ensureStore(shopName: string, storeName?: string) {
     where: { shopName },
     update: {
       ...(storeName ? { name: storeName } : {}),
+      analysisPaused: false,
     },
     create: {
       name: storeName || "My Store",
       shopName,
-      analysisPaused: true,
+      analysisPaused: false,
+      connectedAt: new Date(),
     },
   });
 

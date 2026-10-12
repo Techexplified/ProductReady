@@ -932,7 +932,7 @@ export function sanitizeIssuesAgainstProduct(
   };
 }
 
-function generateFallbackAnalysis(product: ProductInput): AiProductAnalysisResult {
+export function generateFallbackAnalysis(product: ProductInput): AiProductAnalysisResult {
   const imagesList = product.images || [];
   const imagesCount = imagesList.length > 0 ? imagesList.length : (product.mediaCount || 0);
   const hasMultipleImages = imagesCount >= 3;

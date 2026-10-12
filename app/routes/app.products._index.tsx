@@ -233,7 +233,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const { isDisconnected } = await getStoreConnectionStatus(shopName);
   if (isDisconnected && (intent === "run-analysis" || intent === "analyze" || intent === "run-bulk-analysis" || intent === "bulk-analyze")) {
-    return { success: false, message: "Store is currently disconnected. Reconnect store in Settings to run AI audits." };
+    try {
+      await reconnectStoreData(shopName);
+    } catch (e) {}
   }
 
   // Sync Products from Shopify Admin API into PostgreSQL

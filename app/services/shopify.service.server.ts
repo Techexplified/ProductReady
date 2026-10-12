@@ -339,30 +339,6 @@ export async function getShopifyProductWithPolicies(
                 key
                 value
                 type
-                reference {
-                  ... on Metaobject {
-                    id
-                    type
-                    handle
-                    fields {
-                      key
-                      value
-                    }
-                  }
-                }
-                references(first: 10) {
-                  nodes {
-                    ... on Metaobject {
-                      id
-                      type
-                      handle
-                      fields {
-                        key
-                        value
-                      }
-                    }
-                  }
-                }
               }
             }
           }
@@ -681,8 +657,6 @@ export async function getShopifyCompleteProduct(
               description
             }
 
-            totalInventory
-
             featuredImage {
               id
               url
@@ -734,7 +708,6 @@ export async function getShopifyCompleteProduct(
                 barcode
                 price
                 compareAtPrice
-                inventoryQuantity
                 availableForSale
 
                 selectedOptions {
@@ -757,30 +730,6 @@ export async function getShopifyCompleteProduct(
                 key
                 value
                 type
-                reference {
-                  ... on Metaobject {
-                    id
-                    type
-                    handle
-                    fields {
-                      key
-                      value
-                    }
-                  }
-                }
-                references(first: 10) {
-                  nodes {
-                    ... on Metaobject {
-                      id
-                      type
-                      handle
-                      fields {
-                        key
-                        value
-                      }
-                    }
-                  }
-                }
               }
             }
           }
@@ -793,8 +742,11 @@ export async function getShopifyCompleteProduct(
       }
     );
 
-    const { data } = await response.json();
-    const product = data?.product;
+    const resJson = await response.json();
+    if (resJson.errors) {
+      console.warn("GraphQL errors in getShopifyCompleteProduct:", JSON.stringify(resJson.errors));
+    }
+    const product = resJson?.data?.product;
     if (!product) return null;
 
     return {
@@ -864,7 +816,7 @@ export async function getShopifyCompleteProduct(
         barcode: v.barcode || null,
         price: v.price ? `$${parseFloat(v.price).toFixed(2)}` : "$0.00",
         compareAtPrice: v.compareAtPrice ? `$${parseFloat(v.compareAtPrice).toFixed(2)}` : null,
-        inventoryQuantity: v.inventoryQuantity ?? 0,
+        inventoryQuantity: 0,
         availableForSale: Boolean(v.availableForSale),
         selectedOptions: (v.selectedOptions || []).map((opt: any) => ({
           name: opt.name,
