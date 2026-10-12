@@ -139,7 +139,7 @@ function getEnvVar(key: string, fallback: string = ""): string {
 }
 
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL_NAME = getEnvVar("GROQ_MODEL", "openai/gpt-oss-120b");
+const MODEL_NAME = getEnvVar("GROQ_MODEL", "llama-3.3-70b-versatile");
 
 /**
  * Extracts explicit shipping, return, and warranty clauses from product content or store policies.
@@ -552,46 +552,71 @@ Return ONLY a JSON object strictly matching this schema:
 }
 `.trim();
 
-  try {
-    const response = await fetch(GROQ_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: MODEL_NAME,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-      }),
-    });
+  const modelsToTry = [
+    MODEL_NAME,
+    "llama-3.1-8b-instant",
+  ];
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`Groq API HTTP error (${response.status}):`, errText);
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const currentModel = modelsToTry[i];
+    try {
+      const response = await fetch(GROQ_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: currentModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn(`Groq API HTTP error (${response.status}) on model ${currentModel}:`, errText.slice(0, 200));
+
+        // If rate limited (429), pause briefly and retry with fallback model
+        if (response.status === 429 && i < modelsToTry.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          continue;
+        }
+
+        if (i === modelsToTry.length - 1) {
+          return generateFallbackAnalysis(product);
+        }
+        continue;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        console.warn(`Groq API returned empty response content on model ${currentModel}.`);
+        if (i < modelsToTry.length - 1) continue;
+        return generateFallbackAnalysis(product);
+      }
+
+      const cleanedContent = cleanJsonResponse(content);
+      const parsed = JSON.parse(cleanedContent);
+
+      return processGroqAnalysisResponse(parsed, product);
+    } catch (error) {
+      console.warn(`Error executing Groq API product analysis on model ${currentModel}:`, error);
+      if (i < modelsToTry.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        continue;
+      }
       return generateFallbackAnalysis(product);
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      console.error("Groq API returned empty response content.");
-      return generateFallbackAnalysis(product);
-    }
-
-    const cleanedContent = cleanJsonResponse(content);
-    const parsed = JSON.parse(cleanedContent);
-
-    return processGroqAnalysisResponse(parsed, product);
-  } catch (error) {
-    console.error("Error executing Groq API product analysis:", error);
-    return generateFallbackAnalysis(product);
   }
+
+  return generateFallbackAnalysis(product);
 }
 
 function cleanJsonResponse(rawText: string): string {
